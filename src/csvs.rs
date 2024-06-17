@@ -16,23 +16,22 @@ pub fn read_csv<Row: TryFrom<StringRecord>, P: AsRef<Path> + Display>(
 where
 	<Row as TryFrom<StringRecord>>::Error: Debug,
 {
-	let f = File::open(format!("{}{}", PATH_PREFIX, path)).map_err(|e| e.to_string())?;
+	let f = File::open(format!("{}{}", PATH_PREFIX, path))
+		.map_err(|e| format!("{e} @File::open/read_csv"))?;
 
 	let mut rdr = csv::Reader::from_reader(f);
 	let mut rows: Vec<Row> = vec![];
-	// let mut broken = None ;
 	for row in rdr.records() {
 		match row {
 			Err(e) => {
 				println!("{e}");
-				// broken = Some(e);
-				break;
 			}
 			Ok(o) => match o.try_into() {
-				Ok(ok) => rows.push(ok),
+				Ok(ok) => {
+					rows.push(ok);
+				},
 				Err(e) => {
 					println!("{:?}", e);
-					break;
 				}
 			},
 		}
@@ -84,25 +83,27 @@ pub struct Language {
 }
 
 impl Language {
-	pub fn columns() -> [&'static str; 17] {[
-		"id",
-	"name",
-	"macroarea",
-	"latitude",
-	"longitude",
-	"glottocode",
-	"iso6393p3code",
-	"family",
-	"subfamily",
-	"genus",
-	"genus_icon",
-	"iso_codes",
-	"samples_100",
-	"samples_200",
-	"country_id",
-	"source",
-	"parent_id",
-	]}
+	pub fn columns() -> [&'static str; 17] {
+		[
+			"id",
+			"name",
+			"macroarea",
+			"latitude",
+			"longitude",
+			"glottocode",
+			"iso6393p3code",
+			"family",
+			"subfamily",
+			"genus",
+			"genus_icon",
+			"iso_codes",
+			"samples_100",
+			"samples_200",
+			"country_id",
+			"source",
+			"parent_id",
+		]
+	}
 }
 
 #[derive(Debug)]
@@ -118,6 +119,14 @@ pub struct Chapter {
 	pub source: String,
 	pub contributor_id: String,
 	pub with_contributor_id: String,
+}
+
+impl Chapter {
+	pub fn url_in_citation(&self) -> Option<String> {
+		let https = "https://";
+		let body = self.citation.split(https).nth(1)?;
+		body.split(')').next().map(|s| format!("{}{}", https, s))
+	}
 }
 
 impl TryFrom<StringRecord> for Chapter {

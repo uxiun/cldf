@@ -1,18 +1,25 @@
-use std::{collections::{HashMap, HashSet}, fs::OpenOptions, io::{BufWriter, Write}, path::Path};
+use std::{
+	collections::{HashMap, HashSet},
+	fs::OpenOptions,
+	io::{BufWriter, Write},
+	path::Path,
+};
 
 use crate::csvs::{read_csv, Chapter, Language, Parameter, Value};
 
+#[derive(Debug, Clone)]
 pub struct MyLanguage {
-	language: Language,
-	param_values: HashMap<String, SameValue>
+	pub language: Language,
+	pub param_values: HashMap<String, SameValue>,
 }
 
+#[derive(Debug, Clone)]
 pub struct SameValue {
-	value: usize,
-	same_value_language_ids: Vec<String>,
-	value_language_count: usize,
-	language_count_total: usize,
-	count_ratio: f32
+	pub value: usize,
+	pub same_value_language_ids: Vec<String>,
+	pub value_language_count: usize,
+	pub language_count_total: usize,
+	pub count_ratio: f32,
 }
 
 impl SameValue {
@@ -21,7 +28,7 @@ impl SameValue {
 			"value",
 			"same_value_language_ids",
 			"value_language_count",
-			"language_count_total"
+			"language_count_total",
 		]
 	}
 }
@@ -29,6 +36,22 @@ impl SameValue {
 type ValueLanguagesMap = HashMap<usize, HashSet<String>>; // <value, language_ids>
 
 impl MyLanguage {
+	pub fn get_my_languages_by_id<I: IntoIterator<Item = S>, S: ToString>(
+		lang_ids: I,
+	) -> Result<HashMap<String, Self>, String> {
+		let mylangs = get_my_languages(collect_values_per_param()?, collect_values_per_language()?)?;
+
+		let h = lang_ids
+			.into_iter()
+			.filter_map(|s| {
+				let s = s.to_string();
+				mylangs.get(&s).map(|m| (s, m.to_owned()))
+			})
+			.collect();
+
+		Ok(h)
+	}
+
 	fn columns() -> [&'static str; 10] {
 		[
 			"parameter_id",
@@ -40,38 +63,42 @@ impl MyLanguage {
 			"same_value_language_ids",
 			"value_language_count",
 			"language_count_total",
-			"count_ratio"
+			"count_ratio",
 		]
 	}
 
-	fn rows(self,
+	fn rows(
+		self,
 		parameters: HashMap<String, Parameter>,
-		chapters: HashMap<usize, Chapter>
-	) -> Vec<[String ; 10]> {
-		self.param_values.into_iter()
-		.filter_map(|(parameter_id, samevalue)| {
-			let p = parameters.get(&parameter_id)?.clone();
-			let ch = chapters.get(&p.chapter_id)?;
+		chapters: HashMap<usize, Chapter>,
+	) -> Vec<[String; 10]> {
+		self
+			.param_values
+			.into_iter()
+			.filter_map(|(parameter_id, samevalue)| {
+				let p = parameters.get(&parameter_id)?.clone();
+				let ch = chapters.get(&p.chapter_id)?;
 
-			let mut sames = samevalue.same_value_language_ids;
-			sames.sort();
+				let mut sames = samevalue.same_value_language_ids;
+				sames.sort();
 
-			Some([
-				parameter_id,
-				p.name.replace(",", ";"),
-				p.description.replace(",", ";"),
-				p.chapter_id.to_string(),
-				ch.citation.replace(",", ";"),
-				samevalue.value.to_string(),
-				sames.into_iter()
-					.intersperse(" ".to_string())
-					.collect::<String>(),
-				samevalue.value_language_count.to_string(),
-				samevalue.language_count_total.to_string(),
-				samevalue.count_ratio.to_string()
-			])
-		})
-		.collect()
+				Some([
+					parameter_id,
+					p.name.replace(",", ";"),
+					p.description.replace(",", ";"),
+					p.chapter_id.to_string(),
+					ch.citation.replace(",", ";"),
+					samevalue.value.to_string(),
+					sames
+						.into_iter()
+						.intersperse(" ".to_string())
+						.collect::<String>(),
+					samevalue.value_language_count.to_string(),
+					samevalue.language_count_total.to_string(),
+					samevalue.count_ratio.to_string(),
+				])
+			})
+			.collect()
 	}
 
 	pub fn write_to_csv<P: AsRef<Path>>(self, path: P) -> Result<(), String> {
@@ -80,29 +107,26 @@ impl MyLanguage {
 			.intersperse(",")
 			.collect::<String>();
 
-		let parameters =
-			read_csv::<Parameter,_>("parameters.csv")?
+		let parameters = read_csv::<Parameter, _>("parameters.csv")?
 			.into_iter()
 			.map(|l| (l.id.clone(), l))
 			.collect();
 
-		let chapters =
-			read_csv::<Chapter,_>("chapters.csv")?
+		let chapters = read_csv::<Chapter, _>("chapters.csv")?
 			.into_iter()
-			.filter_map(|l| l.id.parse::<usize>().map(|id| (id , l)).ok() )
+			.filter_map(|l| l.id.parse::<usize>().map(|id| (id, l)).ok())
 			.collect();
 
-
-		
-		let rows = self.rows(parameters, chapters)
+		let rows = self
+			.rows(parameters, chapters)
 			.into_iter()
-			.map(|row|
-				row.into_iter()
-				.intersperse(",".to_string())
-				.collect::<String>()
-			)
+			.map(|row| {
+				row
+					.into_iter()
+					.intersperse(",".to_string())
+					.collect::<String>()
+			})
 			.collect::<Vec<_>>();
-
 
 		let mut lines = vec![columns];
 		lines.extend(rows.into_iter());
@@ -118,13 +142,12 @@ impl MyLanguage {
 
 		for line in lines {
 			match b.write_all((line + "\n").as_bytes()) {
-				Ok(_) => {},
-				Err(e) => print!("{e}")
+				Ok(_) => {}
+				Err(e) => print!("{e}"),
 			}
 		}
 
 		Ok(())
-
 	}
 }
 
@@ -135,44 +158,49 @@ pub fn get_my_languages(
 	let langs: Vec<Language> = read_csv("languages.csv")?;
 
 	Ok(
-	langs.into_iter()
-		.filter_map(|lang| {
-			let language = lang.clone();
-			let paramvalue = collected_values_per_lang.get(&lang.id)?;
+		langs
+			.into_iter()
+			.filter_map(|lang| {
+				let language = lang.clone();
+				let paramvalue = collected_values_per_lang.get(&lang.id)?;
 
-			let param_values: HashMap<String, SameValue> =
-				paramvalue.into_iter()
-				.filter_map(|(param_id, value)| {
-					let value_langs = collected_values_per_param.get(param_id)?;
-					let total: usize = collected_values_per_param
-						.iter()
-						.map(|(_, valuelangs)| valuelangs.values().map(|s| s.len()).sum::<usize>() )
-						.sum();
-					let sames = value_langs.get(value)?;
-					let count = sames.len();
-					let sames = sames.into_iter()
-						.filter(|lang_id| lang_id.to_string() != lang.id)
-						.cloned()
-						.collect::<Vec<_>>();
+				let param_values: HashMap<String, SameValue> = paramvalue
+					.into_iter()
+					.filter_map(|(param_id, value)| {
+						let value_langs = collected_values_per_param.get(param_id)?;
+						let total: usize = collected_values_per_param
+							.iter()
+							.map(|(_, valuelangs)| valuelangs.values().map(|s| s.len()).sum::<usize>())
+							.sum();
+						let sames = value_langs.get(value)?;
+						let count = sames.len();
+						let sames = sames
+							.into_iter()
+							.filter(|lang_id| lang_id.to_string() != lang.id)
+							.cloned()
+							.collect::<Vec<_>>();
 
-					let samevalue: SameValue = SameValue {
-						value: *value,
-						same_value_language_ids: sames,
-						value_language_count: count,
-						language_count_total: total,
-						count_ratio: count as f32 / total as f32
-					};
+						let samevalue: SameValue = SameValue {
+							value: *value,
+							same_value_language_ids: sames,
+							value_language_count: count,
+							language_count_total: total,
+							count_ratio: count as f32 / total as f32,
+						};
 
-					Some((param_id.to_owned(), samevalue))
-				})
-				.collect();
+						Some((param_id.to_owned(), samevalue))
+					})
+					.collect();
 
-			Some((lang.id, MyLanguage {
-				language,
-				param_values
-			}))
-		})
-		.collect()
+				Some((
+					lang.id,
+					MyLanguage {
+						language,
+						param_values,
+					},
+				))
+			})
+			.collect(),
 	)
 }
 
@@ -182,16 +210,19 @@ pub fn collect_values_per_param() -> Result<HashMap<String, ValueLanguagesMap>, 
 	let mut rares: HashMap<String, ValueLanguagesMap> = HashMap::new();
 
 	for value in values {
-		rares.entry(value.parameter_id)
+		rares
+			.entry(value.parameter_id)
 			.and_modify(|h| {
 				h.entry(value.value)
-				.and_modify(|set| {set.insert(value.language_id.clone()); })
-				.or_insert(HashSet::from_iter([value.language_id.clone()])); }
-			)
-			.or_insert(HashMap::from_iter([
-				(value.value, HashSet::from_iter([value.language_id]))
-			])
-			);
+					.and_modify(|set| {
+						set.insert(value.language_id.clone());
+					})
+					.or_insert(HashSet::from_iter([value.language_id.clone()]));
+			})
+			.or_insert(HashMap::from_iter([(
+				value.value,
+				HashSet::from_iter([value.language_id]),
+			)]));
 	}
 
 	Ok(rares)
@@ -208,14 +239,12 @@ pub fn collect_values_per_language() -> Result<HashMap<String, ParamValueMap>, S
 		hm.entry(value.language_id)
 			.and_modify(|h| {
 				h.entry(value.parameter_id.clone())
-				.and_modify(|set| {
-					*set = value.value; })
-				.or_insert(value.value);
+					.and_modify(|set| {
+						*set = value.value;
+					})
+					.or_insert(value.value);
 			})
-			.or_insert(HashMap::from_iter([
-				(value.parameter_id, value.value)
-			])
-			);
+			.or_insert(HashMap::from_iter([(value.parameter_id, value.value)]));
 	}
 
 	Ok(hm)
